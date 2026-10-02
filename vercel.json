@@ -1,0 +1,35 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "csas-backend": {
+      "root": "csas-backend",
+      "framework": "express"
+    },
+    "csas-frontend": {
+      "root": "csas-frontend",
+      "framework": "vite",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "csas-backend",
+          "format": "url",
+          "env": "BACKEND_URL"
+        }
+      ]
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "csas-backend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "csas-frontend"
+      }
+    }
+  ]
+}
