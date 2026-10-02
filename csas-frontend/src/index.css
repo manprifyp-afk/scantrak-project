@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/* ===========================================================================
+   ScanTrak design tokens  (Tailwind v4 @theme)
+   Defining --color-* / --font-* here generates the matching utilities, e.g.
+   bg-brand-600, text-ink-900, bg-pass-soft, text-fail, font-display, font-mono.
+   =========================================================================== */
+@theme {
+  /* Typography — distinctive display + clean technical body + mono for codes */
+  --font-display: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Accent — warm clay / terracotta */
+  --color-brand-50: #faf1e9;
+  --color-brand-100: #f3ddce;
+  --color-brand-200: #e8c0a4;
+  --color-brand-300: #db9d75;
+  --color-brand-400: #cd7f55;
+  --color-brand-500: #c26f47;
+  --color-brand-600: #b45f3f;
+  --color-brand-700: #8f4728;
+  --color-brand-800: #743a24;
+  --color-brand-900: #5f3220;
+
+  /* Ink — warm stone/taupe neutrals for text, surfaces, borders */
+  --color-ink-50: #f7f3ec;
+  --color-ink-100: #ece5d8;
+  --color-ink-200: #ddd4c2;
+  --color-ink-300: #c8bca6;
+  --color-ink-400: #a89d88;
+  --color-ink-500: #837a68;
+  --color-ink-600: #6b6252;
+  --color-ink-700: #524a3d;
+  --color-ink-800: #38322a;
+  --color-ink-900: #292420;
+  --color-ink-950: #1a1611;
+
+  /* Status — muted, earthy Pass / Fail / Warn (each with a soft bg tint) */
+  --color-pass: #4b7a52;
+  --color-pass-soft: #e2ece0;
+  --color-fail: #a1402f;
+  --color-fail-soft: #f2ded4;
+  --color-warn: #a9761f;
+  --color-warn-soft: #f4e9cf;
+
+  /* Surfaces */
+  --color-canvas: #f2ede2; /* warm sand app background */
+  --color-surface: #fbf8f1; /* soft warm white for cards */
+  --color-night: #2a231b; /* warm dark brown for heroes + dark cards */
+  --color-sidebar: #ece4d3; /* light sand sidebar */
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-canvas text-ink-900 font-sans antialiased;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display tracking-tight;
+  }
+  /* A nicer default focus ring in the brand color, for accessibility. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+}

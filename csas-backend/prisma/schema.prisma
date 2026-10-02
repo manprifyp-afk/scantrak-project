@@ -1,0 +1,236 @@
+// ============================================================================
+//  Campus Smart Attendance System (CSAS) — Prisma schema
+//  Database: PostgreSQL
+//
+//  Models: User, Course, Enrollment, ClassSession, AttendanceRecord
+//  Place this file at  prisma/schema.prisma  and run:
+//      npx prisma migrate dev --name init
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+//  Enums
+// ----------------------------------------------------------------------------
+
+enum Role {
+  STUDENT
+  LECTURER
+  ADMIN
+}
+
+enum AttendanceStatus {
+  PRESENT  // valid scan, recorded inside the time window
+  LATE     // valid scan, but after a grace period
+  ABSENT   // no scan recorded for an enrolled student
+  REJECTED // scan failed a validation check (kept as a fraud signal)
+}
+
+enum Semester {
+  FIRST
+  SECOND
+}
+
+enum ProgrammeStream {
+  REGULAR
+  WEEKEND
+  EVENING
+}
+
+// ----------------------------------------------------------------------------
+//  User — one table for all roles (Student, Lecturer, Admin)
+// ----------------------------------------------------------------------------
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  fullName     String
+  role         Role    @default(STUDENT)
+
+  /// Matric number (students) or staff ID (lecturers/admins). Optional, unique.
+  idNumber String? @unique
+
+  /// Device binding: one account is locked to one physical device.
+  /// Set on first login; the validator rejects scans from any other device.
+  /// Nullable so lecturers/admins (who may not scan) aren't forced to bind.
+  deviceId String? @unique
+
+  // Relations
+  coursesTaught     Course[] // courses where this user is the lecturer
+  enrollments       Enrollment[] // courses this user is enrolled in (students)
+  attendanceRecords AttendanceRecord[] // scans submitted by this user
+  scanAttempts      ScanAttempt[] // every scan attempt, accepted or rejected
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+}
+
+// ----------------------------------------------------------------------------
+//  Course — taught by one lecturer, enrolled in by many students
+// ----------------------------------------------------------------------------
+
+model Course {
+  id    String @id @default(cuid())
+  code  String @unique // academic code, e.g. "CS101"
+  joinCode String? @unique // auto-generated code students use to enrol, e.g. "K7QM2P"
+  title String
+
+  // --- Academic context (which class/cohort this offering is for) ---
+  programme String?         // e.g. "BSc Computer Science"
+  level     Int?            // 100, 200, 300, 400 (Ghanaian level system)
+  semester  Semester?       // FIRST / SECOND
+  stream    ProgrammeStream @default(REGULAR) // REGULAR / WEEKEND / EVENING
+  creditHours Int?           // credit weighting, e.g. 3
+
+  // FK -> User (the lecturer). Restrict deletion so a lecturer with live
+  // courses can't be removed out from under them.
+  lecturer   User   @relation(fields: [lecturerId], references: [id], onDelete: Restrict)
+  lecturerId String
+
+  // Relations
+  enrollments Enrollment[]
+  sessions    ClassSession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lecturerId])
+}
+
+// ----------------------------------------------------------------------------
+//  Enrollment — join table linking Students <-> Courses (many-to-many)
+// ----------------------------------------------------------------------------
+
+model Enrollment {
+  id String @id @default(cuid())
+
+  student   User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId String
+
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId String
+
+  enrolledAt DateTime @default(now())
+
+  // A student can only be enrolled in a given course once.
+  @@unique([studentId, courseId])
+  @@index([courseId])
+}
+
+// ----------------------------------------------------------------------------
+//  ClassSession — a single class meeting; carries the geo-fence + TOTP secret
+// ----------------------------------------------------------------------------
+
+model ClassSession {
+  id    String  @id @default(cuid())
+  title String? // e.g. "Lecture 5 — Normalization"
+  venue String? // room/hall this lecture is held in, e.g. "Room B12", "LT 1"
+
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId String
+
+  // --- Timing ---
+  startsAt DateTime
+  endsAt   DateTime
+  isActive Boolean  @default(true) // lecturer can open/close the session
+
+  // --- Geo-fence ---
+  // Center of the allowed zone and its radius. The validator compares the
+  // student's captured coordinates against this using the Haversine formula.
+  latitude     Float // Decimal(9,6) is an option if you want fixed precision
+  longitude    Float
+  radiusMeters Int   @default(50)
+
+  // --- Dynamic QR / TOTP ---
+  // Seed from which the 30-second rotating codes are derived (e.g. via otplib).
+  // NOTE: encrypt this at rest in production; never expose it to clients.
+  totpSecret String
+
+  // Relations
+  attendanceRecords AttendanceRecord[]
+  scanAttempts      ScanAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId])
+  @@index([isActive])
+}
+
+// ----------------------------------------------------------------------------
+//  AttendanceRecord — one row per student per session (the audit trail)
+// ----------------------------------------------------------------------------
+
+model AttendanceRecord {
+  id String @id @default(cuid())
+
+  session   ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+
+  student   User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId String
+
+  status AttendanceStatus @default(PRESENT)
+
+  // What the device reported at scan time — useful for auditing/disputes.
+  capturedLat    Float?
+  capturedLng    Float?
+  distanceMeters Float? // computed distance from the geo-fence center
+  deviceId       String? // device used for this specific scan
+
+  // Populated when status = REJECTED, e.g. "EXPIRED_CODE", "OUTSIDE_FENCE",
+  // "DEVICE_MISMATCH". A spike of these is a fraud signal for the dashboard.
+  failureReason String?
+
+  scannedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  // One attendance row per student per session prevents duplicate check-ins.
+  @@unique([sessionId, studentId])
+  @@index([studentId])
+}
+
+// ----------------------------------------------------------------------------
+//  ScanAttempt — full audit log of every scan, accepted or rejected.
+//  Unlike AttendanceRecord (one clean row per student per session), this table
+//  has no uniqueness constraint, so it captures every try. A burst of REJECTED
+//  rows is the fraud signal the dashboard surfaces.
+// ----------------------------------------------------------------------------
+
+enum ScanOutcome {
+  ACCEPTED
+  REJECTED
+}
+
+model ScanAttempt {
+  id String @id @default(cuid())
+
+  session   ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+
+  student   User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId String
+
+  outcome        ScanOutcome
+  reason         String? // machine code when rejected, e.g. "OUTSIDE_FENCE"
+  capturedLat    Float?
+  capturedLng    Float?
+  distanceMeters Float?
+  deviceId       String?
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([studentId])
+  @@index([outcome])
+}
