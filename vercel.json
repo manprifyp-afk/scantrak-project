@@ -1,17 +1,25 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "csas-backend": {
-      "root": "csas-backend",
-      "framework": "express"
+  "builds": [
+    {
+      "src": "csas-backend/api/index.js",
+      "use": "@vercel/node"
     },
-    "csas-frontend": {
-      "root": "csas-frontend",
-      "framework": "vite"
+    {
+      "src": "csas-frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
     }
-  },
+  ],
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/csas-backend/api/$1" },
-    { "source": "/(.*)", "destination": "/csas-frontend/$1" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/csas-backend/api/index.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/csas-frontend/$1"
+    }
   ]
 }
