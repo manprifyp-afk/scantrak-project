@@ -1,25 +1,43 @@
 {
   "builds": [
     {
-      "src": "csas-backend/api/index.js",
+      "src": "csas-backend/api/index.ts",
       "use": "@vercel/node"
     },
     {
       "src": "csas-frontend/package.json",
       "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
+      "config": { "distDir": "dist" }
     }
   ],
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "destination": "/csas-backend/api/index.js"
+      "src": "/auth/(.*)",
+      "dest": "csas-backend/api/index.ts"
     },
     {
-      "source": "/(.*)",
-      "destination": "/csas-frontend/$1"
+      "src": "/courses/(.*)",
+      "dest": "csas-backend/api/index.ts"
+    },
+    {
+      "src": "/sessions/(.*)",
+      "dest": "csas-backend/api/index.ts"
+    },
+    {
+      "src": "/attendance/(.*)",
+      "dest": "csas-backend/api/index.ts"
+    },
+    {
+      "src": "/reports/(.*)",
+      "dest": "csas-backend/api/index.ts"
+    },
+    {
+      "src": "/admin/(.*)",
+      "dest": "csas-backend/api/index.ts"
+    },
+    {
+      "src": "/health",
+      "dest": "csas-backend/api/index.ts"
     }
   ]
 }
